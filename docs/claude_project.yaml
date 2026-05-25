@@ -1,0 +1,32 @@
+cat > ~/.anthropic_core/anthropic_cli.py <<'PY'
+#!/usr/bin/env python3
+import sys, pathlib, subprocess
+
+CORE_DIR = pathlib.Path.home() / ".anthropic_core"
+LOG_FILE = CORE_DIR / "logs" / "cli.log"
+
+def log(msg):
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOG_FILE, "a") as f:
+        f.write(msg + "\n")
+    print(msg)
+
+def main():
+    if len(sys.argv) < 2:
+        log("Usage: anthropic_cli.py <commande>")
+        sys.exit(1)
+
+    cmd = sys.argv[1]
+    if cmd == "help":
+        log("Commandes Python disponibles : help, version")
+    elif cmd == "version":
+        log("Anthropic Core v1.0.0 (interface Python)")
+    else:
+        log(f"Commande inconnue : {cmd}")
+
+if __name__ == "__main__":
+    main()
+PY
+
+chmod +x ~/.anthropic_core/anthropic_cli.py
+
