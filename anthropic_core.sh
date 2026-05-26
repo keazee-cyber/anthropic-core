@@ -1,113 +1,146 @@
 #!/usr/bin/env bash
-# === Anthropic Core 1.0 ===
+# ==========================================================
+# Anthropic Core CLI — version 2.1.0 (macOS/Linux compatible)
+# ==========================================================
 
-export ANTHRO_VERSION="1.0.0"
-ANTH_HOME="$HOME/.anthropic_core"
-LOG_DIR="$ANTH_HOME/logs"
-mkdir -p "$LOG_DIR"
+CORE_VERSION="2.1.0"
+CORE_NAME="Anthropic Core CLI"
+CORE_FILE="$HOME/.anthropic_core/anthropic_core.sh"
+BACKUP_DIR="$HOME/.anthropic_core/backups"
+BASH_PROFILE="$HOME/.bash_profile"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 
-# === Étape 1 : Vérification du .bash_profile ===
-check_balance() {
-    echo "🔍 Vérification du fichier : $HOME/.bash_profile"
-    local ifs=$(grep -cE '(^|[[:space:]])if[[:space:]]' "$HOME/.bash_profile" || true)
-    local fis=$(grep -cE '(^|[[:space:]])fi([[:space:]]|$)' "$HOME/.bash_profile" || true)
-    echo "if=$ifs fi=$fis"
-    if [ "$ifs" -ne "$fis" ]; then
-        echo "⚠️  Nombre de if/fi déséquilibré."
-    else
-        echo "✅ Blocs if/fi équilibrés"
-    fi
+# --- Fonction : affichage d’en-tête ---
+header() {
+  echo "=== $CORE_NAME (v$CORE_VERSION) ==="
 }
 
-# === Étape 2 : Sauvegarde du profil ===
-backup_profile() {
-    local src="$HOME/.bash_profile"
-    local dest="$ANTH_HOME/backups"
-    mkdir -p "$dest"
-    local file="$dest/.bash_profile.backup.$(date +%Y%m%d_%H%M%S)"
-    cp "$src" "$file"
-    echo "✅ Sauvegarde créée : $file"
+# --- Fonction : sauvegarde du .bash_profile ---
+backup_core() {
+  header
+  echo "💾 Sauvegarde du fichier ~/.bash_profile"
+
+  mkdir -p "$BACKUP_DIR"
+  local BACKUP_FILE="$BACKUP_DIR/bash_profile_backup_$TIMESTAMP"
+  cp "$BASH_PROFILE" "$BACKUP_FILE"
+  echo "✅ Sauvegarde créée : $BACKUP_FILE"
 }
 
-# === Étape 3 : Mise à jour du Core ===
-update_self() {
-    local backup="$ANTH_HOME/backup_${ANTHRO_VERSION}_$(date +%Y%m%d%H%M%S).tar.gz"
-    tar -czf "$backup" "$ANTH_HOME"
-    echo "✅ Sauvegarde du core créée : $backup"
-    echo "🔄 (Simulation) Mise à jour réussie."
+# --- Fonction : restauration du .bash_profile ---
+restore_bash_profile() {
+  header
+  echo "🩺 Restauration du fichier .bash_profile depuis la sauvegarde..."
+  local LATEST_BACKUP
+  LATEST_BACKUP=$(ls -t "$BACKUP_DIR"/bash_profile_backup_* 2>/dev/null | head -n 1)
+
+  if [ -z "$LATEST_BACKUP" ]; then
+    echo "❌ Aucune sauvegarde trouvée."
+    return 1
+  fi
+
+  echo "Dernière sauvegarde trouvée : $LATEST_BACKUP"
+  echo -n "Souhaitez-vous vraiment restaurer cette sauvegarde ? [o/N] "
+  read -r confirmation
+
+  case "$confirmation" in
+    [oO]|[oO][uU][iI])
+      cp "$LATEST_BACKUP" "$BASH_PROFILE"
+      echo "✅ Fichier .bash_profile restauré avec succès."
+      ;;
+    *)
+      echo "❎ Opération annulée."
+      ;;
+  esac
 }
 
-# === Étape 4 : Statut du projet Claude ===
-anthropic_status() {
-    local yaml_file="$HOME/claude_project.yaml"
+# --- Fonction : lister les sauvegardes (compatible macOS/Linux) ---
+list_backups() {
+  header
+  echo "📂 Liste des sauvegardes dans $BACKUP_DIR :"
+  if ls --version >/dev/null 2>&1; then
+    ls -lh --time-style=long-iso "$BACKUP_DIR"
+  else
+    ls -lhT "$BACKUP_DIR"
+  fi
+}
 
-    if [[ ! -f "$yaml_file" ]]; then
-        echo "⚠️  Fichier $yaml_file introuvable."
+# --- Fonction : mise à jour locale ---
+update_core() {
+  header
+  echo "🔄 Mise à jour locale du Core..."
+  echo "✅ Core local mis à jour avec succès (simulation)."
+}
+
+# --- Fonction : mise à jour depuis GitHub avec vérification SHA-256 ---
+upgrade_core() {
+  header
+  echo "⬆️  Mise à jour du Core depuis GitHub..."
+  echo -n "Souhaitez-vous vraiment télécharger et remplacer le Core depuis GitHub ? [o/N] "
+  read -r confirmation
+
+  case "$confirmation" in
+    [oO]|[oO][uU][iI])
+      TMP_DIR=$(mktemp -d)
+      NEW_SCRIPT_URL="https://raw.githubusercontent.com/AnthropicCore/anthropic-core/main/anthropic_core.sh"
+      SHA_URL="https://raw.githubusercontent.com/AnthropicCore/anthropic-core/main/anthropic_core.sh.sha256"
+
+      echo "⏳ Téléchargement du script..."
+      curl -fsSL "$NEW_SCRIPT_URL" -o "$TMP_DIR/new_core.sh" || { echo "❌ Échec du téléchargement."; return 1; }
+
+      echo "⏳ Téléchargement du hash SHA‑256..."
+      curl -fsSL "$SHA_URL" -o "$TMP_DIR/new_core.sh.sha256" || { echo "❌ Échec du téléchargement du hash."; return 1; }
+
+      echo "🔐 Vérification de l’intégrité..."
+      cd "$TMP_DIR" || return 1
+      if shasum -a 256 -c new_core.sh.sha256 >/dev/null 2>&1; then
+        echo "✅ Vérification SHA‑256 réussie."
+        cp "$CORE_FILE" "$BACKUP_DIR/core_backup_$TIMESTAMP.sh"
+        cp "$TMP_DIR/new_core.sh" "$CORE_FILE"
+        chmod +x "$CORE_FILE"
+        echo "✅ Core mis à jour depuis GitHub avec succès."
+      else
+        echo "❌ Vérification SHA‑256 échouée — mise à jour annulée."
         return 1
-    fi
-
-    echo "📊 Statut du projet Claude"
-    echo "──────────────────────────────"
-
-    awk '
-    /^[[:space:]]*-/ {
-        axis=$2
-        getline
-        if ($1=="score:") {
-            score=$2
-color="\033[0m"
-if (score>=80) color="\033[1;32m"
-else if (score>=50) color="\033[1;33m"
-else color="\033[1;31m"
-printf "%-25s → %s%s%%\033[0m\n", axis, color, score
-        }
-    }' "$yaml_file"
-
-    echo "──────────────────────────────"
-    echo "✅ Lecture terminée."
+      fi
+      ;;
+    *)
+      echo "❎ Opération annulée."
+      ;;
+  esac
 }
 
-# === Gestion des commandes ===
+# --- Fonction : affichage de la version ---
+show_version() {
+  header
+  echo "📦 Fichier : $CORE_FILE"
+  echo "📅 Dernière modification : $(date -r "$CORE_FILE" '+%d %b %Y %H:%M:%S')"
+  echo "👤 Utilisateur : $(whoami)"
+  echo "💻 Système : $(uname -srm)"
+  echo "✅ Core opérationnel."
+}
+
+# --- Fonction : affichage de l’aide ---
+show_help() {
+  header
+  echo
+  echo "Commandes disponibles :"
+  echo "  backup         → Sauvegarde le fichier .bash_profile"
+  echo "  restore        → Restaure la dernière sauvegarde"
+  echo "  list-backups   → Liste les sauvegardes disponibles"
+  echo "  update         → Met à jour le Core local"
+  echo "  upgrade        → Met à jour le Core depuis GitHub (avec vérification SHA‑256)"
+  echo "  version        → Affiche la version et les infos système"
+  echo
+  echo "Exemple : anthropic backup --force"
+}
+
+# --- Dispatcher principal ---
 case "$1" in
-  check)   check_balance ;;
-  backup)  backup_profile ;;
-  update)  update_self ;;
-  status)  anthropic_status ;;
-  version) echo "Anthropic Core version $ANTHRO_VERSION" ;;
-  *)
-    echo "=== Anthropic CLI ==="
-    echo "Commandes disponibles :"
-    echo "  check     → vérifie la cohérence du .bash_profile"
-    echo "  backup    → crée une sauvegarde horodatée du .bash_profile"
-    echo "  update    → exécute la fonction update_self() du Core"
-    echo "  status    → affiche le statut du projet Claude"
-    echo "  version   → affiche la version du Core"
-    echo
-    echo "Exemple : anthropic check"
-    ;;
+  backup) backup_core ;;
+  restore) restore_bash_profile ;;
+  list-backups) list_backups ;;
+  update) update_core ;;
+  upgrade) upgrade_core ;;
+  version) show_version ;;
+  *) show_help ;;
 esac
-
-# ──────────────────────────────────────────────
-# 📊 Fonction : anthropic_status
-# ──────────────────────────────────────────────
-anthropic_status() {
-    echo "📊 Statut du projet Claude"
-    echo "──────────────────────────────"
-    local yaml_file="$HOME/claude_project.yaml"
-    if [[ ! -f "$yaml_file" ]]; then
-        echo "⚠️  Fichier $yaml_file introuvable."
-        return 1
-    fi
-
-    # Exemple de lecture simple du YAML (si jq est dispo)
-    if command -v yq >/dev/null 2>&1; then
-        yq '.axes[] | "\(.nom): \(.score)%"' "$yaml_file"
-    else
-        echo "ℹ️  yq non installé — affichage brut :"
-        cat "$yaml_file"
-    fi
-
-    echo "──────────────────────────────"
-    echo "✅ Lecture terminée."
-}
-
