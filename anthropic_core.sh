@@ -1,193 +1,183 @@
 #!/bin/bash
-# ==========================================================
-# Anthropic Core CLI – v2.1.0
-# Gestion de l’environnement de développement Claude
-# Auteur : Thierry Teplier (keazee-cyber)
-# ==========================================================
+# === Anthropic Core v1.0.0 - Configuration shell personnalisée ===
 
-CORE_VERSION="2.1.0"
-CORE_DIR="$HOME/.anthropic_core"
-BACKUP_DIR="$CORE_DIR/backups"
-BASH_PROFILE="$HOME/.bash_profile"
+# Variable globale pour le chemin du core
+export ANTHROPIC_CORE="$HOME/.anthropic_core/anthropic_core.sh"
 
-# URLs GitHub pour la mise à jour
-REMOTE_SCRIPT_URL="https://raw.githubusercontent.com/keazee-cyber/anthropic-core/main/anthropic_core.sh"
-REMOTE_HASH_URL="https://raw.githubusercontent.com/keazee-cyber/anthropic-core/main/anthropic_core.sh.sha256"
-
-# ==========================================================
-# Fonctions utilitaires
-# ==========================================================
-
-log() { echo -e "$1"; }
-
-ensure_dirs() {
-  mkdir -p "$BACKUP_DIR"
+# Affiche la version du Core
+version() {
+  echo "Anthropic Core v1.0.0"
 }
 
-# ==========================================================
-# Sauvegarde et restauration
-# ==========================================================
+# Affiche l'aide et la liste des commandes
+anthropic() {
+  local command="$1"
+  shift
 
-backup_profile() {
-  ensure_dirs
-  local timestamp
-  timestamp=$(date +"%Y%m%d_%H%M%S")
-  local backup_file="$BACKUP_DIR/bash_profile_backup_$timestamp"
-  cp "$BASH_PROFILE" "$backup_file"
-  log "✅ Sauvegarde créée : $backup_file"
+  case "$command" in
+    help)
+      echo "=== Anthropic CLI — Aide ==="
+      echo "Commandes disponibles :"
+      echo "  status                → affiche le statut du Core"
+      echo "  version               → affiche la version du Core"
+      echo "  backup                → crée une sauvegarde horodatée du Core et du .bash_profile"
+      echo "  restore-last-backup   → restaure la dernière sauvegarde"
+      echo "  restore <nom>         → restaure une sauvegarde précise"
+      echo "  list-backups          → affiche les sauvegardes disponibles"
+      echo "  update [--force]      → met à jour le Core local"
+      echo "  upgrade [--force]     → met à jour le Core depuis GitHub (avec SHA‑256)"
+      echo "  publish               → publie le Core et le hash sur GitHub"
+      echo "  help                  → affiche cette aide"
+      return 0
+      ;;
+    version)
+      version
+      return 0
+      ;;
+    status)
+      echo "=== Statut Anthropic Core ==="
+      echo "Fichier core : $ANTHROPIC_CORE"
+      echo "Version : $(version)"
+      echo "Dossier de sauvegardes : $HOME/.anthropic_core/backups/"
+      echo "Nombre de sauvegardes : $(ls -1 $HOME/.anthropic_core/backups/ | wc -l | xargs)"
+      if [ -f "$HOME/.anthropic_core/SHA256SUM" ]; then
+        echo "Hash SHA-256 actuel : $(cat $HOME/.anthropic_core/SHA256SUM)"
+      else
+        echo "Hash SHA-256 : non généré"
+      fi
+      return 0
+      ;;
+    backup)
+      # Crée un dossier backups si il n'existe pas
+      mkdir -p "$HOME/.anthropic_core/backups"
+      local timestamp=$(date +%Y%m%d_%H%M%S)
+      # Sauvegarde .bash_profile et le core
+      cp "$HOME/.bash_profile" "$HOME/.anthropic_core/backups/bash_profile_$timestamp.bak"
+      cp "$ANTHROPIC_CORE" "$HOME/.anthropic_core/backups/anthropic_core_$timestamp.bak"
+      echo "💾 Sauvegardes créées :"
+      echo "  - $HOME/.anthropic_core/backups/bash_profile_$timestamp.bak"
+      echo "  - $HOME/.anthropic_core/backups/anthropic_core_$timestamp.bak"
+      return 0
+      ;;
+    list-backups)
+      echo "=== Sauvegardes disponibles ==="
+      ls -1ht "$HOME/.anthropic_core/backups/"
+      return 0
+      ;;
+    restore-last-backup)
+      local last_backup=$(ls -1t "$HOME/.anthropic_core/backups/" | grep -E "(bash_profile|anthropic_core)" | head -n 2)
+      echo "♻️  Restauration de la dernière sauvegarde..."
+      for file in $last_backup; do
+        if [[ $file == bash_profile_* ]]; then
+          cp "$HOME/.anthropic_core/backups/$file" "$HOME/.bash_profile"
+          echo "✅ .bash_profile restauré"
+        elif [[ $file == anthropic_core_* ]]; then
+          cp "$HOME/.anthropic_core/backups/$file" "$ANTHROPIC_CORE"
+          echo "✅ anthropic_core.sh restauré"
+        fi
+      done
+      source "$HOME/.bash_profile"
+      echo "🎉 Restauration terminée, rechargement de la configuration effectué"
+      return 0
+      ;;
+    restore)
+      local name="$1"
+      if [[ -z "$name" ]]; then
+        echo "❌ Il faut préciser le nom de la sauvegarde"
+        list-backups
+        return 1
+      fi
+      echo "♻️  Restauration de la sauvegarde $name..."
+      if [[ $name == bash_profile_* ]]; then
+        cp "$HOME/.anthropic_core/backups/$name.bak" "$HOME/.bash_profile"
+        echo "✅ .bash_profile restauré"
+      elif [[ $name == anthropic_core_* ]]; then
+        cp "$HOME/.anthropic_core/backups/$name.bak" "$ANTHROPIC_CORE"
+        echo "✅ anthropic_core.sh restauré"
+      else
+        cp "$HOME/.anthropic_core/backups/bash_profile_$name.bak" "$HOME/.bash_profile" 2>/dev/null
+        cp "$HOME/.anthropic_core/backups/anthropic_core_$name.bak" "$ANTHROPIC_CORE" 2>/dev/null
+      fi
+      source "$HOME/.bash_profile"
+      echo "🎉 Restauration terminée, rechargement de la configuration effectué"
+      return 0
+      ;;
+    update)
+      backup >/dev/null
+      local force="$1"
+      echo "Mise à jour du Core en cours..."
+      # Re-génération du hash interne
+      local new_hash=$(shasum -a 256 "$ANTHROPIC_CORE" | awk '{print $1}')
+      echo "$new_hash" > "$HOME/.anthropic_core/SHA256SUM"
+      echo "✅ Mise à jour locale terminée, hash SHA-256 régénéré"
+      return 0
+      ;;
+    upgrade)
+      backup >/dev/null
+      local force="$1"
+      echo "⬇️  Téléchargement de la dernière version depuis GitHub..."
+      cd "$HOME/.anthropic_core" || { echo "❌ Impossible d'accéder au dossier Core"; return 1; }
+
+      # Télécharge la dernière version
+      if curl -f -o anthropic_core.sh.tmp https://raw.githubusercontent.com/thierryteplier/anthropic-core/main/anthropic_core.sh; then
+        # Vérifie le hash si il existe
+        if [ -f "$HOME/.anthropic_core/SHA256SUM" ]; then
+          local remote_hash=$(cat SHA256SUM)
+          local tmp_hash=$(shasum -a 256 anthropic_core.sh.tmp | awk '{print $1}')
+          if [ "$remote_hash" != "$tmp_hash" ] && [[ -z "$force" ]]; then
+            echo "❌ Le hash SHA-256 ne correspond pas, annonce de sécurité annulée. Utilise --force pour forcer."
+            rm anthropic_core.sh.tmp
+            return 1
+          fi
+        fi
+        # Remplace l'ancien fichier
+        mv anthropic_core.sh.tmp "$ANTHROPIC_CORE"
+        echo "✅ Mise à jour terminée, rechargement de la configuration..."
+        source "$HOME/.bash_profile"
+        echo "🎉 Mise à jour effectuée avec succès"
+        return 0
+      else
+        echo "❌ Échec du téléchargement, vérifie ton URL GitHub"
+        rm -f anthropic_core.sh.tmp
+        return 1
+      fi
+      ;;
+    publish)
+      local message="$1"
+      if [[ -z "$message" ]]; then
+        message="Mise à jour Core v$(version | grep -Eo [0-9]+.[0-9]+.[0-9]+) du $(date +%Y-%m-%d)"
+      fi
+
+      # Sauvegarde automatique avant publication
+      backup >/dev/null
+      echo "🔒 Sauvegarde automatique effectuée avant publication"
+
+      # Régénération du hash SHA-256
+      local core_file="$HOME/.anthropic_core/anthropic_core.sh"
+      local new_hash=$(shasum -a 256 "$core_file" | awk '{print $1}')
+      echo "$new_hash" > "$HOME/.anthropic_core/SHA256SUM"
+      echo "✅ Hash SHA-256 régénéré : $new_hash"
+
+      # Push sur GitHub
+      cd "$HOME/.anthropic_core" || { echo "❌ Impossible d'accéder au dossier Core"; return 1; }
+      git add . >/dev/null
+      git commit -m "$message" >/dev/null
+      git push origin main >/dev/null
+
+      echo "🎉 Publication terminée : $message"
+      return 0
+      ;;
+    *)
+      echo "❌ Commande inconnue. Tapez 'anthropic help' pour voir la liste des commandes."
+      return 1
+      ;;
+  esac
 }
 
-restore_last_backup() {
-  local last_backup
-  last_backup=$(ls -t "$BACKUP_DIR"/bash_profile_backup_* 2>/dev/null | head -n 1)
-  if [ -z "$last_backup" ]; then
-    log "❌ Aucune sauvegarde trouvée."
-  else
-    cp "$last_backup" "$BASH_PROFILE"
-    log "✅ Restauration effectuée depuis : $last_backup"
-  fi
+# Complétion automatique pour les commandes anthropic
+_anthropic_completions() {
+  local cur=${COMP_WORDS[COMP_CWORD]}
+  local commands="help version status backup restore-last-backup restore list-backups update upgrade publish"
+  COMPREPLY=($(compgen -W "$commands" -- $cur))
 }
-
-restore_backup() {
-  local name="$1"
-  local file="$BACKUP_DIR/$name"
-  if [ -f "$file" ]; then
-    cp "$file" "$BASH_PROFILE"
-    log "✅ Restauration effectuée depuis : $file"
-  else
-    log "❌ Sauvegarde introuvable : $name"
-  fi
-}
-
-list_backups() {
-  ls -1 "$BACKUP_DIR" 2>/dev/null || log "Aucune sauvegarde disponible."
-}
-
-# ==========================================================
-# Mise à jour locale
-# ==========================================================
-
-update_core() {
-  log "🔄 Mise à jour du Core local..."
-  git -C "$CORE_DIR" pull || log "⚠️  Impossible de mettre à jour localement."
-}
-# ==========================================================
-# Publication automatique sur GitHub (Core + SHA‑256)
-# ==========================================================
-
-publish_core() {
-  log "🚀 Publication du Core sur GitHub..."
-
-  # Vérifie que le dossier est bien un dépôt Git
-  if [ ! -d "$CORE_DIR/.git" ]; then
-    log "❌ Aucun dépôt Git trouvé dans $CORE_DIR"
-    return 1
-  fi
-
-  cd "$CORE_DIR" || return 1
-
-  # Recalcule le hash SHA‑256
-  shasum -a 256 anthropic_core.sh > anthropic_core.sh.sha256
-  log "🔐 Hash SHA‑256 régénéré."
-
-  # Ajoute et pousse les fichiers
-  git add anthropic_core.sh anthropic_core.sh.sha256
-  git commit -m "Publication automatique du Core CLI"
-  git push origin main && log "✅ Core publié sur GitHub avec succès."
-}
-
-# ==========================================================
-# Mise à jour depuis GitHub (avec vérification SHA‑256)
-# ==========================================================
-
-upgrade_core() {
-  log "⬆️  Mise à jour du Core depuis GitHub..."
-  read -r -p "Souhaitez-vous vraiment télécharger et remplacer le Core depuis GitHub ? [o/N] " confirm
-  if [[ "$confirm" != "o" && "$confirm" != "O" ]]; then
-    log "❌ Opération annulée."
-    return
-  fi
-
-  local tmp_script="/tmp/anthropic_core.sh"
-  local tmp_hash="/tmp/anthropic_core.sh.sha256"
-
-  log "⏳ Téléchargement du script..."
-  curl -fsSL "$REMOTE_SCRIPT_URL" -o "$tmp_script" || { log "❌ Échec du téléchargement du script."; return; }
-
-  log "⏳ Téléchargement du hash SHA‑256..."
-  curl -fsSL "$REMOTE_HASH_URL" -o "$tmp_hash" || { log "❌ Échec du téléchargement du hash."; return; }
-
-  log "🔐 Vérification de l’intégrité..."
-  if shasum -a 256 -c "$tmp_hash" --status; then
-    mv "$tmp_script" "$CORE_DIR/anthropic_core.sh"
-    chmod +x "$CORE_DIR/anthropic_core.sh"
-    log "✅ Vérification SHA‑256 réussie."
-    log "✅ Core mis à jour depuis GitHub avec succès."
-  else
-    log "❌ Échec de la vérification SHA‑256. Fichier non remplacé."
-  fi
-}
-
-# ==========================================================
-# Publication automatique sur GitHub
-# ==========================================================
-
-publish_core() {
-  cd "$CORE_DIR" || return
-  shasum -a 256 anthropic_core.sh > anthropic_core.sh.sha256
-  git add anthropic_core.sh anthropic_core.sh.sha256
-  git commit -m "Publication automatique du Core CLI"
-  git push origin main
-  log "✅ Core publié sur GitHub avec succès."
-}
-
-# ==========================================================
-# Statut et version
-# ==========================================================
-
-status_core() {
-  log "=== Anthropic Core CLI (v$CORE_VERSION) ==="
-  log "📦 Fichier : $CORE_DIR/anthropic_core.sh"
-  log "📅 Dernière modification : $(date -r "$CORE_DIR/anthropic_core.sh")"
-  log "👤 Utilisateur : $(whoami)"
-  log "💻 Système : $(uname -a)"
-  log "✅ Core opérationnel."
-}
-
-show_version() {
-  log "Anthropic Core CLI – version $CORE_VERSION"
-}
-
-show_help() {
-  cat <<EOF
-=== Anthropic CLI (v$CORE_VERSION) ===
-Commandes disponibles :
-  backup                → crée une sauvegarde horodatée du .bash_profile
-  restore-last-backup   → restaure la dernière sauvegarde
-  restore <nom>         → restaure une sauvegarde précise
-  list-backups          → affiche les sauvegardes disponibles
-  update [--force]      → met à jour le Core local
-  upgrade [--force]     → met à jour le Core depuis GitHub (avec SHA‑256)
-  publish               → publie le Core et le hash sur GitHub
-  status                → affiche le statut du Core
-  version               → affiche la version du Core
-  help                  → affiche cette aide
-EOF
-}
-
-# ==========================================================
-# Routeur de commandes
-# ==========================================================
-
-case "$1" in
-  backup) backup_profile ;;
-  restore-last-backup) restore_last_backup ;;
-  restore) restore_backup "$2" ;;
-  list-backups) list_backups ;;
-  update) update_core ;;
-  upgrade) upgrade_core ;;
-  publish) publish_core ;;
-  status) status_core ;;
-  version) show_version ;;
-  help|*) show_help ;;
-esac
+complete -F _anthropic_completions anthropic
