@@ -71,6 +71,30 @@ update_core() {
   log "🔄 Mise à jour du Core local..."
   git -C "$CORE_DIR" pull || log "⚠️  Impossible de mettre à jour localement."
 }
+# ==========================================================
+# Publication automatique sur GitHub (Core + SHA‑256)
+# ==========================================================
+
+publish_core() {
+  log "🚀 Publication du Core sur GitHub..."
+
+  # Vérifie que le dossier est bien un dépôt Git
+  if [ ! -d "$CORE_DIR/.git" ]; then
+    log "❌ Aucun dépôt Git trouvé dans $CORE_DIR"
+    return 1
+  fi
+
+  cd "$CORE_DIR" || return 1
+
+  # Recalcule le hash SHA‑256
+  shasum -a 256 anthropic_core.sh > anthropic_core.sh.sha256
+  log "🔐 Hash SHA‑256 régénéré."
+
+  # Ajoute et pousse les fichiers
+  git add anthropic_core.sh anthropic_core.sh.sha256
+  git commit -m "Publication automatique du Core CLI"
+  git push origin main && log "✅ Core publié sur GitHub avec succès."
+}
 
 # ==========================================================
 # Mise à jour depuis GitHub (avec vérification SHA‑256)
